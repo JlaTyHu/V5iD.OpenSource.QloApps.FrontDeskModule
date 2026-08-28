@@ -32,6 +32,6 @@ jobs:
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "Release-$VERSION.zip" 
+          artifacts: "Release-${{ env.VERSION }}.zip" 
           token: ${{ secrets.GITHUB_TOKEN }} # Built-in automated token (no setup needed)
           generateReleaseNotes: false # Automatically generates release notes based on commit history
