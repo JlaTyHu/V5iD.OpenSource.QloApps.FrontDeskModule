@@ -1,0 +1,47 @@
+name: Deployment v5id-document-api-release
+
+# When this action will be executed
+on:
+  # Automatically trigger it when detected changes in repo
+  push:
+    tags:
+      - 'v*.*.*'
+
+### Secrets ###
+# - V5ID_REGISTRY_USERNAME (User name of the v5idregistryprod.azurecr.io)
+# - V5ID_REGISTRY_PASSWORD (Password of the v5idregistryprod.azurecr.io)
+# - ACTION_PACKAGE_GITHUB_USERNAME
+# - ACTION_PACKAGE_GITHUB_TOKEN
+
+# Builds the release image for a v*.*.* tag; it deploys nothing. The X.Y.Z-alpine
+# image is what V5id.Infra.ContainerApps pins in modules/container-version.bicep.
+
+env:
+  REPO: 'v5idregistryprod.azurecr.io/v5id-document-api'
+  REGISTRY: 'v5idregistryprod.azurecr.io'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extract version (remove leading v)
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Create ZIP archive
+        # -r zip directories recursively; -q suppresses output log
+        run: |
+          cp README.md v5idfrontdesk/
+          cp LICENSE v5idfrontdesk/
+          zip -rq Release-$VERSION.zip v5idfrontdesk/ 
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "Release-$VERSION.zip" 
+          token: ${{ secrets.GITHUB_TOKEN }} # Built-in automated token (no setup needed)
+          generateReleaseNotes: false # Automatically generates release notes based on commit history
