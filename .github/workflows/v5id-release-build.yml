@@ -7,14 +7,8 @@ on:
     tags:
       - 'v*.*.*'
 
-### Secrets ###
-# - V5ID_REGISTRY_USERNAME (User name of the v5idregistryprod.azurecr.io)
-# - V5ID_REGISTRY_PASSWORD (Password of the v5idregistryprod.azurecr.io)
-# - ACTION_PACKAGE_GITHUB_USERNAME
-# - ACTION_PACKAGE_GITHUB_TOKEN
 
-# Builds the release image for a v*.*.* tag; it deploys nothing. The X.Y.Z-alpine
-# image is what V5id.Infra.ContainerApps pins in modules/container-version.bicep.
+# Builds the release image for a v*.*.* tag; 
 
 env:
   REPO: 'v5idregistryprod.azurecr.io/v5id-document-api'
