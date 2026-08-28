@@ -1,4 +1,4 @@
-name: Deployment v5id-document-api-release
+name: Deployment QloApps.FrontDeskModule-release
 
 # When this action will be executed
 on:
@@ -9,10 +9,6 @@ on:
 
 
 # Builds the release image for a v*.*.* tag; 
-
-env:
-  REPO: 'v5idregistryprod.azurecr.io/v5id-document-api'
-  REGISTRY: 'v5idregistryprod.azurecr.io'
 
 jobs:
   build-and-deploy:
