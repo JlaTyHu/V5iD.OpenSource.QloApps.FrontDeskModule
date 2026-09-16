@@ -57,6 +57,16 @@
         return formatDate(d);
     }
 
+    /**
+     * An ID payload typed into the search field by a keyboard-wedge scanner
+     * must never reach SearchGuests. AAMVA opens with '@' or carries the ANSI
+     * marker; a passport MRZ carries the '<<' filler. None of the three
+     * occurs in a guest name, room number or order reference.
+     */
+    function looksLikeIdScan(term) {
+        return term.charAt(0) === '@' || term.indexOf('ANSI') !== -1 || term.indexOf('<<') !== -1;
+    }
+
     function guestName(row) {
         return [row.firstname, row.lastname].filter(Boolean).join(' ') || '—';
     }
@@ -399,6 +409,18 @@
                 if (!this.idHotel) {
                     return;
                 }
+                if (looksLikeIdScan(this.searchTerm)) {
+                    // The scanner emitted into the search field because it
+                    // held focus (see scanner-listener.js). The debounce has
+                    // already waited out the burst, so the term is the whole
+                    // payload — validate it instead of searching for it.
+                    var scanned = this.searchTerm;
+                    this.searchTerm = '';
+                    this.searchResults = [];
+                    this.handleScan(scanned);
+                    return;
+                }
+
                 var seq = ++this.searchSeq;
                 this.searching = true;
                 api('SearchGuests', { id_hotel: this.idHotel, term: this.searchTerm }).then(function (res) {
@@ -627,9 +649,10 @@
             '    </div>' +
             '    <div class="v5idfd-toolbar-right">' +
             '      <div class="v5idfd-search">' +
-            '        <input type="text" v-model="searchTerm" @input="onSearchInput" placeholder="Search guest, room, order…">' +
-            '        <div class="v5idfd-search-results" v-if="searchResults.length">' +
-            '          <div class="v5idfd-search-row" v-for="r in searchResults" :key="r.id_hotel_booking_detail" @click="selectSearchResult(r)">' +
+            '        <input type="text" v-model="searchTerm" @input="onSearchInput" @keydown.esc="searchResults = []" role="combobox" :aria-expanded="searchResults.length > 0" aria-controls="v5idfd-search-list" placeholder="Search guest, room, order…">' +
+            '        <div class="v5idfd-search-results" id="v5idfd-search-list" role="listbox" v-if="searchResults.length">' +
+            '          <div class="v5idfd-search-row" v-for="r in searchResults" :key="r.id_hotel_booking_detail" role="option" tabindex="0"' +
+            '               @click="selectSearchResult(r)" @keydown.enter.prevent="selectSearchResult(r)" @keydown.space.prevent="selectSearchResult(r)" @keydown.esc="searchResults = []">' +
             '            <strong>{{ guestName(r) }}</strong>' +
             '            <span>Room {{ r.room_num }} · {{ r.date_from.substr(0,10) }} → {{ r.date_to.substr(0,10) }}</span>' +
             '          </div>' +
@@ -664,7 +687,9 @@
             '          </div>' +
             '          <div class="v5idfd-day-col" v-for="d in days" :key="d">' +
             '            <div v-for="b in bookingsForRoomDay(room.id_room, d)" :key="b.id_hotel_booking_detail"' +
-            '                 class="v5idfd-cell" :class="statusClass(b.id_status)" @click="openBooking(b)">' +
+            '                 class="v5idfd-cell" :class="statusClass(b.id_status)" role="button" tabindex="0"' +
+            '                 :aria-label="guestName(b) + \', room \' + room.room_num + \', \' + statusLabel(b.id_status)"' +
+            '                 @click="openBooking(b)" @keydown.enter.prevent="openBooking(b)" @keydown.space.prevent="openBooking(b)">' +
             '              {{ guestName(b) }}' +
             '            </div>' +
             '          </div>' +

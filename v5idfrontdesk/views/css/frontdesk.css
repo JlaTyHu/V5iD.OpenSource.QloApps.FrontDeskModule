@@ -300,6 +300,12 @@
     text-overflow: ellipsis;
 }
 
+.v5idfd-cell:focus-visible,
+.v5idfd-search-row:focus-visible {
+    outline: 2px solid var(--v5fd-primary);
+    outline-offset: -2px;
+}
+
 .v5idfd-cell:hover {
     filter: brightness(0.97);
 }
