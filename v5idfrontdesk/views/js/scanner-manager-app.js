@@ -64,7 +64,19 @@
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body.toString(),
             credentials: 'same-origin',
-        }).then(function (res) { return res.json(); });
+        }).then(function (res) {
+            if (!res.ok) {
+                throw new Error('The front desk server returned an error (HTTP ' + res.status + ').');
+            }
+
+            return res.text().then(function (text) {
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    throw new Error('Your back office session has expired. Reload this page and sign in again.');
+                }
+            });
+        });
     }
 
     function isProtocolUsable(protocol) {
@@ -197,6 +209,8 @@
                 } else {
                     logLine(res.message || 'Could not remove this scanner.');
                 }
+            }).catch(function (err) {
+                logLine((err && err.message) ? err.message : 'Could not remove this scanner.');
             });
         });
 
@@ -308,6 +322,8 @@
                     } else {
                         logLine(res.message || 'Could not save this scanner.');
                     }
+                }).catch(function (err) {
+                    logLine((err && err.message) ? err.message : 'Could not save this scanner.');
                 });
             }).catch(function () {
                 btn.disabled = false;
@@ -363,6 +379,8 @@
                 listRoot.appendChild(emptyNotice);
             }
             res.devices.forEach(addDeviceRow);
+        }).catch(function (err) {
+            root.appendChild(el('div', 'v5sm-warning', (err && err.message) ? err.message : 'Could not load scanners for this property.'));
         });
 
         buildPairSection(root, function (devices) {

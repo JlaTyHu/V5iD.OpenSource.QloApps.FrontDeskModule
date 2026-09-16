@@ -26,7 +26,17 @@
             body: body.toString(),
             credentials: 'same-origin',
         }).then(function (res) {
-            return res.json();
+            if (!res.ok) {
+                throw new Error('The front desk server returned an error (HTTP ' + res.status + '). Please try again.');
+            }
+
+            return res.text().then(function (text) {
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    throw new Error('Your back office session has expired. Reload this page and sign in again.');
+                }
+            });
         });
     }
 
@@ -300,6 +310,15 @@
             },
             guestName: guestName,
 
+            apiFailed: function (loadingFlag, fallback) {
+                return function (err) {
+                    if (loadingFlag) {
+                        this[loadingFlag] = false;
+                    }
+                    this.errorMessage = (err && err.message) ? err.message : fallback;
+                }.bind(this);
+            },
+
             loadBoard: function () {
                 if (!this.idHotel) {
                     return;
@@ -316,10 +335,7 @@
                         this.rooms = res.rooms;
                         this.bookings = res.bookings;
                     }.bind(this))
-                    .catch(function () {
-                        this.loadingBoard = false;
-                        this.errorMessage = 'Network error while loading the board.';
-                    }.bind(this));
+                    .catch(this.apiFailed('loadingBoard', 'Network error while loading the board.'));
             },
 
             loadActivity: function () {
@@ -331,7 +347,7 @@
                         this.activity = res.activity;
                         this.scans = res.scans;
                     }
-                }.bind(this));
+                }.bind(this)).catch(this.apiFailed('', 'Could not load recent activity.'));
             },
 
             shiftDates: function (days) {
@@ -373,7 +389,7 @@
                     if (res.success) {
                         this.searchResults = res.results;
                     }
-                }.bind(this));
+                }.bind(this)).catch(this.apiFailed('searching', 'Could not search guests.'));
             },
 
             /**
@@ -424,7 +440,7 @@
                     if (res.success) {
                         this.profileCheck = res;
                     }
-                }.bind(this));
+                }.bind(this)).catch(this.apiFailed('profileCheckLoading', 'Could not check the guest profile.'));
             },
             applyGuestProfile: function () {
                 if (!this.profileCheck || !this.profileCheck.check.canAutoApply.length || !this.selected || !this.profileCheckScan) {
@@ -442,7 +458,7 @@
                         return;
                     }
                     this.profileCheck = res;
-                }.bind(this));
+                }.bind(this)).catch(this.apiFailed('profileApplyLoading', 'Could not update the guest record.'));
             },
             profileStatusLabel: function (status) {
                 switch (status) {
@@ -475,7 +491,7 @@
                     this.selected.check_out = res.booking.check_out;
                     this.loadBoard();
                     this.loadActivity();
-                }.bind(this));
+                }.bind(this)).catch(this.apiFailed('actionLoading', 'Action failed.'));
             },
 
             openSwap: function () {
@@ -490,7 +506,7 @@
                     } else {
                         this.errorMessage = res.message || 'Could not load swap candidates.';
                     }
-                }.bind(this));
+                }.bind(this)).catch(this.apiFailed('swapLoading', 'Could not load swap candidates.'));
             },
             moveToRoom: function (idRoom) {
                 this.runSwap({ mode: 'move', id_room_to: idRoom });
@@ -514,7 +530,7 @@
                     this.selected = null;
                     this.loadBoard();
                     this.loadActivity();
-                }.bind(this));
+                }.bind(this)).catch(this.apiFailed('actionLoading', 'Could not move the room.'));
             },
 
             /**
@@ -541,6 +557,8 @@
                         this.openBooking(res.matches[0], res.result);
                     }
                     this.loadActivity();
+                }.bind(this)).catch(function (err) {
+                    this.scanBanner = { loading: false, error: (err && err.message) ? err.message : 'Scan failed.' };
                 }.bind(this));
             },
             scanOutcome: function (result) {
