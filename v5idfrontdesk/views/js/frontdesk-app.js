@@ -12,6 +12,7 @@
     // Only one App instance is ever mounted per page, so a closure-level
     // variable here is equivalent to an instance property.
     var scannerChannel = null;
+    var onVisibilityChange = null;
 
     var MANAGER_PING_INTERVAL_MS = 2000;
     /** Three missed pings — the manager answers over BroadcastChannel, which the browser does not throttle. */
@@ -224,11 +225,22 @@
             }
 
             this.setupScannerChannel();
+
+            // A hidden board tab has its own ping interval throttled too, so
+            // coming back to it could otherwise show a stale scanner badge
+            // until the next throttled tick, up to a minute away.
+            onVisibilityChange = function () {
+                if (!document.hidden && scannerChannel) {
+                    scannerChannel.send('ping');
+                }
+            };
+            document.addEventListener('visibilitychange', onVisibilityChange);
         },
         beforeUnmount: function () {
             if (window.V5idScannerListener) {
                 window.V5idScannerListener.stop();
             }
+            document.removeEventListener('visibilitychange', onVisibilityChange);
             if (this.managerPingTimer) {
                 window.clearInterval(this.managerPingTimer);
             }
