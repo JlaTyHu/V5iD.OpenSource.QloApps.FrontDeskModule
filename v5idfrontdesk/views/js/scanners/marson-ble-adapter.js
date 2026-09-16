@@ -137,10 +137,11 @@
                 /* not exposed on this device — expected, fall through */
             }
 
-            // Web Bluetooth's own per-origin device id, as a last resort — a
-            // stable-enough fallback so pairing can still succeed even if
-            // neither the vendor command nor 2a25 answered.
-            return device && device.id ? device.id : null;
+            // No browser-generated fallback: device.id is a Web Bluetooth
+            // identifier scoped to this origin and profile, not the serial
+            // the V5iD portal holds, so pairing under it would succeed while
+            // every later scan was rejected for an unregistered device.
+            return null;
         }
 
         async function connectGatt(maxAttempts) {
@@ -179,6 +180,11 @@
             notifyFlushTimer = setTimeout(flushNotifyBuffer, NOTIFY_DEBOUNCE_MS);
         }
 
+        /** A scan performed during the serial handshake must not be answered as the command response — see processBarcode() for the same acceptance rule. */
+        function looksLikeIdScan(text) {
+            return text.indexOf('ANSI') !== -1 || text.trim().length >= 50;
+        }
+
         function flushNotifyBuffer() {
             if (notifyBytes.length === 0) {
                 return;
@@ -187,7 +193,7 @@
             notifyBytes = [];
             var text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
 
-            if (pendingSerialResolve) {
+            if (pendingSerialResolve && !looksLikeIdScan(text)) {
                 var resolve = pendingSerialResolve;
                 pendingSerialResolve = null;
                 resolve(text);

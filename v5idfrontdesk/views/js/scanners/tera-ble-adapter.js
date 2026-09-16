@@ -53,6 +53,8 @@
     var NOTIFY_DEBOUNCE_MS = 350;
     /** Per-attempt timeout for one CMD_GET_SERIAL request/response round trip. */
     var SERIAL_ATTEMPT_TIMEOUT_MS = 6000;
+    /** Ceiling on those attempts — a unit that stays linked but never answers must not keep connect() pending for the rest of the shift. */
+    var SERIAL_MAX_ATTEMPTS = 5;
     /** Fixed retry cadence once connected — matches the reference client's own indefinite "every 2s until it's back" reconnect loop, rather than escalating backoff. */
     var RECONNECT_INTERVAL_MS = 2000;
 
@@ -117,12 +119,16 @@
 
         /**
          * The device treats the first CMD_GET_SERIAL as a wake-up trigger and
-         * only answers a later one once it's ready — matching the reference
-         * client, this keeps re-sending it until a response arrives or the
-         * link drops, rather than a single request/response.
+         * only answers a later one once it's ready, so this re-sends it —
+         * but a bounded number of times: the reference client's own
+         * indefinite loop leaves connect() pending forever against a unit
+         * that stays linked and never answers.
          */
         async function requestSerialNumber() {
-            while (writeChr && isLinked() && !userDisconnected) {
+            for (var attempt = 1; attempt <= SERIAL_MAX_ATTEMPTS; attempt++) {
+                if (!writeChr || !isLinked() || userDisconnected) {
+                    return null;
+                }
                 try {
                     var responsePromise = waitForNotifyFlush(SERIAL_ATTEMPT_TIMEOUT_MS);
                     await sendCommand(CMD_GET_SERIAL);
@@ -131,23 +137,11 @@
                         return raw;
                     }
                 } catch (e) {
-                    /* no answer this round — loop and retry while still linked */
+                    /* no answer this round — retry while still linked */
                 }
             }
+
             return null;
-        }
-
-        async function getSerialNumber() {
-            var fromCommand = await requestSerialNumber();
-            if (fromCommand) {
-                return fromCommand;
-            }
-
-            // Not part of the reference client (which relies solely on the
-            // vendor command), but consistent with this module's other
-            // adapters: a stable-enough fallback so pairing can still
-            // succeed if the vendor command never answers.
-            return device && device.id ? device.id : null;
         }
 
         async function connectGatt(maxAttempts) {
@@ -177,10 +171,15 @@
             notifyChr.addEventListener('characteristicvaluechanged', onNotify);
         }
 
+        /** A scan performed during the serial handshake must not be answered as the command response — see processBarcode() for the same acceptance rule. */
+        function looksLikeIdScan(text) {
+            return text.indexOf('ANSI') !== -1 || text.trim().length >= 50;
+        }
+
         function onNotify(event) {
             var text = new TextDecoder('utf-8', { fatal: false }).decode(event.target.value);
 
-            if (pendingSerialResolve) {
+            if (pendingSerialResolve && !looksLikeIdScan(text)) {
                 var raw = text.replace(/[\r\n\x00]/g, '').trim();
                 if (raw.length > 0) {
                     var resolve = pendingSerialResolve;
@@ -329,7 +328,7 @@
                     // Serial before Immediate Mode, same order as the
                     // reference client — so the mode-switch command doesn't
                     // block the serial-request loop above it.
-                    var serial = await getSerialNumber();
+                    var serial = await requestSerialNumber();
                     await sendCommand(CMD_IMMEDIATE_MODE);
 
                     setStatus('connected');

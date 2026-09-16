@@ -138,6 +138,11 @@
         row.appendChild(log);
         var logLine = makeLogger(log);
 
+        function reportError(message) {
+            channel.send('error', { deviceId: device.id, adapterId: device.adapter_id, message: message });
+            logLine('Error: ' + message);
+        }
+
         function setStatus(next) {
             status = next;
             badge.textContent = STATUS_LABEL[status] || status;
@@ -185,10 +190,21 @@
                     logLine('Scan received (' + raw.length + ' chars) at ' + new Date().toLocaleTimeString());
                 },
                 onStatusChange: setStatus,
-                onError: function (message) {
-                    channel.send('error', { deviceId: device.id, adapterId: device.adapter_id, message: message });
-                    logLine('Error: ' + message);
-                },
+                onError: reportError,
+            }).then(function (result) {
+                // The serial sent with every scan comes from the database
+                // row, so connecting this row to a different physical unit
+                // would file that unit's scans under this one's registered
+                // serial, in the module scan log and in the V5iD portal
+                // alike. An adapter that cannot read a serial at all reports
+                // null, which is not a mismatch and stays allowed.
+                var reported = result && result.serial;
+                if (reported && reported !== device.serial) {
+                    instance.disconnect();
+                    instance = null;
+                    reportError('This is a different unit: it reports serial ' + reported + ', but this row is paired with ' + device.serial + '.');
+                    setStatus('error');
+                }
             }).catch(function () {
                 // Status/error already reported through the callbacks above
                 // (e.g. the user cancelled the device chooser).
