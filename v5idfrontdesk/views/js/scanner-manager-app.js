@@ -109,8 +109,9 @@
      *
      * @param {object} device Row from GetScannerDevices — {id, adapter_id, serial, label}.
      * @param {Element} root
+     * @param {function():void} onRemoved Called once the device is deleted server-side.
      */
-    function buildDeviceRow(device, root) {
+    function buildDeviceRow(device, root, onRemoved) {
         var protocol = registry.get(device.adapter_id);
         var usable = isProtocolUsable(protocol);
         var status = 'disconnected';
@@ -195,17 +196,19 @@
         });
 
         removeBtn.addEventListener('click', function () {
-            if (status === 'connected' || status === 'reconnecting') {
-                if (instance) {
-                    instance.disconnect();
-                }
-            }
+            // Confirm before acting: disconnecting first left a cancelled
+            // removal with the scanner torn down anyway, and scans simply
+            // stopped arriving.
             if (!window.confirm('Remove "' + device.label + '"? You can pair it again later.')) {
                 return;
+            }
+            if (instance) {
+                instance.disconnect();
             }
             api('DeleteScannerDevice', { id_hotel: config.idHotel, id_device: device.id }).then(function (res) {
                 if (res.success) {
                     row.remove();
+                    onRemoved();
                 } else {
                     logLine(res.message || 'Could not remove this scanner.');
                 }
@@ -367,7 +370,17 @@
             if (emptyNotice.parentNode) {
                 emptyNotice.remove();
             }
-            rows.push(buildDeviceRow(device, listRoot));
+            var entry = buildDeviceRow(device, listRoot, function () {
+                // The ping handler below answers on behalf of everything in
+                // rows, so a deleted device must leave it too or board tabs
+                // keep being told about a scanner that no longer exists.
+                var index = rows.indexOf(entry);
+                if (index !== -1) {
+                    rows.splice(index, 1);
+                }
+                delete renderedIds[device.id];
+            });
+            rows.push(entry);
         }
 
         api('GetScannerDevices', { id_hotel: config.idHotel }).then(function (res) {
