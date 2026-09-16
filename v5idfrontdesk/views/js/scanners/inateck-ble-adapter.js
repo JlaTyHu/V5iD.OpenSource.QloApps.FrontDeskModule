@@ -322,15 +322,11 @@
 
             // Hex-encoded payloads decode to the real text first.
             if (/^[0-9A-Fa-f]+$/.test(bcData) && bcData.length % 2 === 0) {
-                try {
-                    var decoded = '';
-                    for (var i = 0; i < bcData.length; i += 2) {
-                        decoded += String.fromCharCode(parseInt(bcData.substr(i, 2), 16));
-                    }
-                    barcodeText = decoded;
-                } catch (err) {
-                    /* not actually hex — use as-is */
+                var decoded = '';
+                for (var i = 0; i < bcData.length; i += 2) {
+                    decoded += String.fromCharCode(parseInt(bcData.substr(i, 2), 16));
                 }
+                barcodeText = decoded;
             }
 
             // Anchor on the AAMVA/ANSI marker and back up to the '@' that starts the payload.
