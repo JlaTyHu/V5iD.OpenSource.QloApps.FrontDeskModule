@@ -76,15 +76,15 @@
         return [row.firstname, row.lastname].filter(Boolean).join(' ') || '—';
     }
 
-    var STATUS_LABEL = {};
-    STATUS_LABEL[cfg.statuses ? cfg.statuses.alloted : 1] = 'Reserved';
-    STATUS_LABEL[cfg.statuses ? cfg.statuses.checkedIn : 2] = 'In house';
-    STATUS_LABEL[cfg.statuses ? cfg.statuses.checkedOut : 3] = 'Checked out';
+    var STATUS_IDS = cfg.statuses || { alloted: 1, checkedIn: 2, checkedOut: 3 };
 
-    var STATUS_CLASS = {};
-    STATUS_CLASS[cfg.statuses ? cfg.statuses.alloted : 1] = 'is-alloted';
-    STATUS_CLASS[cfg.statuses ? cfg.statuses.checkedIn : 2] = 'is-checkedin';
-    STATUS_CLASS[cfg.statuses ? cfg.statuses.checkedOut : 3] = 'is-checkedout';
+    var STATUS_META = {};
+    STATUS_META[STATUS_IDS.alloted] = { label: 'Reserved', className: 'is-alloted' };
+    STATUS_META[STATUS_IDS.checkedIn] = { label: 'In house', className: 'is-checkedin' };
+    STATUS_META[STATUS_IDS.checkedOut] = { label: 'Checked out', className: 'is-checkedout' };
+
+    /** Most to least significant: one connected scanner makes the property's scanners connected, whatever the others report. */
+    var SCANNER_STATUS_PRIORITY = ['connected', 'reconnecting', 'connecting', 'error'];
 
     var App = {
         data: function () {
@@ -156,22 +156,11 @@
                 // than looking up a single status per enabled protocol,
                 // which would have one device's status silently clobber
                 // another's of the same protocol.
-                var statuses = Object.keys(this.scannerStatuses).map(function (deviceId) {
-                    return this.scannerStatuses[deviceId];
-                }.bind(this));
-                if (statuses.indexOf('connected') !== -1) {
-                    return 'connected';
-                }
-                if (statuses.indexOf('reconnecting') !== -1) {
-                    return 'reconnecting';
-                }
-                if (statuses.indexOf('connecting') !== -1) {
-                    return 'connecting';
-                }
-                if (statuses.indexOf('error') !== -1) {
-                    return 'error';
-                }
-                return 'disconnected';
+                var statuses = Object.values(this.scannerStatuses);
+
+                return SCANNER_STATUS_PRIORITY.find(function (candidate) {
+                    return statuses.indexOf(candidate) !== -1;
+                }) || 'disconnected';
             },
             scannerLabel: function () {
                 if (!this.managerAlive) {
@@ -345,10 +334,10 @@
                 }
             },
             statusLabel: function (idStatus) {
-                return STATUS_LABEL[idStatus] || '—';
+                return STATUS_META[idStatus] ? STATUS_META[idStatus].label : '—';
             },
             statusClass: function (idStatus) {
-                return STATUS_CLASS[idStatus] || '';
+                return STATUS_META[idStatus] ? STATUS_META[idStatus].className : '';
             },
             guestName: guestName,
 

@@ -79,17 +79,6 @@
         });
     }
 
-    function isProtocolUsable(protocol) {
-        if (!protocol) {
-            return false;
-        }
-        try {
-            return !!protocol.isSupported();
-        } catch (e) {
-            return false;
-        }
-    }
-
     function makeLogger(container) {
         return function logLine(text) {
             var line = el('div', 'v5sm-log-line', text);
@@ -113,7 +102,9 @@
      */
     function buildDeviceRow(device, root, onRemoved) {
         var protocol = registry.get(device.adapter_id);
-        var usable = isProtocolUsable(protocol);
+        // registry.available() already wraps isSupported() in the same
+        // try/catch this used to repeat.
+        var usable = !!protocol && registry.available().indexOf(protocol) !== -1;
         var status = 'disconnected';
         var instance = null;
 

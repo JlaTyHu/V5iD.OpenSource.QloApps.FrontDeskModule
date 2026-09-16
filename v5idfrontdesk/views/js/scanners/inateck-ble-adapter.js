@@ -48,61 +48,19 @@
         '0000ae00-0000-1000-8000-00805f9b34fb',
         '000018f0-0000-1000-8000-00805f9b34fb',
         '0000180a-0000-1000-8000-00805f9b34fb',
-        '0000ff01-0000-1000-8000-00805f9b34fb',
+        N_CHR,
         '0000ff02-0000-1000-8000-00805f9b34fb',
         '0000ff03-0000-1000-8000-00805f9b34fb',
-        '0000ff04-0000-1000-8000-00805f9b34fb',
-        '0000ff05-0000-1000-8000-00805f9b34fb',
+        W_CHR,
+        A_CHR,
         FFE1_CHR,
     ];
 
+    /** BLE MTU payload for one write. */
+    var WRITE_CHUNK_BYTES = 20;
+
     function checkSum(arr) {
         return arr.reduce(function (s, b) { return s + b; }, 0) % 256;
-    }
-
-    function chunk(arr, n) {
-        var out = [];
-        for (var i = 0; i < arr.length; i += n) {
-            out.push(arr.slice(i, i + n));
-        }
-        return out;
-    }
-
-    function stringToByte(str) {
-        var bytes = [];
-        for (var i = 0; i < str.length; i++) {
-            var c = str.charCodeAt(i);
-            if (c >= 0x10000) {
-                bytes.push(((c >> 18) & 0x07) | 0xf0, ((c >> 12) & 0x3f) | 0x80, ((c >> 6) & 0x3f) | 0x80, (c & 0x3f) | 0x80);
-            } else if (c >= 0x800) {
-                bytes.push(((c >> 12) & 0x0f) | 0xe0, ((c >> 6) & 0x3f) | 0x80, (c & 0x3f) | 0x80);
-            } else if (c >= 0x80) {
-                bytes.push(((c >> 6) & 0x1f) | 0xc0, (c & 0x3f) | 0x80);
-            } else {
-                bytes.push(c & 0xff);
-            }
-        }
-        return bytes;
-    }
-
-    function byteToString(arr) {
-        var str = '';
-        for (var i = 0; i < arr.length; i++) {
-            var one = arr[i].toString(2);
-            var v = one.match(/^1+?(?=0)/);
-            if (v && one.length === 8) {
-                var bl = v[0].length;
-                var store = arr[i].toString(2).slice(7 - bl);
-                for (var st = 1; st < bl; st++) {
-                    store += arr[st + i].toString(2).slice(2);
-                }
-                str += String.fromCharCode(parseInt(store, 2));
-                i += bl - 1;
-            } else {
-                str += String.fromCharCode(arr[i]);
-            }
-        }
-        return str;
     }
 
     function createAdapter() {
@@ -136,11 +94,10 @@
         }
 
         async function writeChunked(chr, bytes) {
-            var parts = chunk(bytes, 20);
             var props = chr.properties;
             var useWithResponse = props && props.write && !props.writeWithoutResponse;
-            for (var i = 0; i < parts.length; i++) {
-                var p = parts[i];
+            for (var i = 0; i < bytes.length; i += WRITE_CHUNK_BYTES) {
+                var p = bytes.slice(i, i + WRITE_CHUNK_BYTES);
                 var dv = new DataView(new ArrayBuffer(p.length));
                 p.forEach(function (b, idx) { dv.setUint8(idx, b); });
                 if (useWithResponse) {
@@ -221,13 +178,15 @@
                 return null;
             }
             var barcodeBytes = frame.slice(2, pktLen + 2);
-            var barcode = byteToString(barcodeBytes);
+            var barcode = new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(barcodeBytes));
             notifyBuffer = notifyBuffer.slice(total);
             return barcode;
         }
 
         async function doAuth() {
-            var payload = [].concat(stringToByte(''), [0x00], stringToByte(''), [0x00], stringToByte(''));
+            // The authentication frame carries three empty credential fields,
+            // so the payload is the two separators and nothing else.
+            var payload = [0x00, 0x00];
             var strLength = payload.length;
             var msg = [0xf1];
             if (strLength < 255) {
