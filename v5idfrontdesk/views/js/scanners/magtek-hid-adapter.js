@@ -34,6 +34,8 @@
 (function (window, document, navigator) {
     'use strict';
 
+    var support = window.V5idScannerSupport;
+
     // Dynamic import() from a classic (non-module) script resolves a
     // relative specifier against the *page's* URL, not this script's own —
     // so a plain '../vendor/magtek/...' string here would resolve wrong
@@ -115,22 +117,7 @@
             barcodeText = decoded;
         }
 
-        var ansiIdx = barcodeText.indexOf('ANSI');
-        if (ansiIdx < 0) {
-            // A passport machine-readable zone carries no ANSI marker, so
-            // anchoring on it alone discarded every passport scan on this
-            // device. Same acceptance rule as the Bluetooth adapters.
-            return barcodeText.length >= 50 ? barcodeText : null;
-        }
-        var startIdx = ansiIdx;
-        for (var j = ansiIdx - 1; j >= Math.max(0, ansiIdx - 20); j--) {
-            if (barcodeText[j] === '@') {
-                startIdx = j;
-                break;
-            }
-        }
-
-        return barcodeText.substring(startIdx);
+        return support.extractIdPayload(barcodeText);
     }
 
     function createInstance() {

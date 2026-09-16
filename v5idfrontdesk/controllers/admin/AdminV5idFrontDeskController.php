@@ -190,6 +190,9 @@ class AdminV5idFrontDeskController extends ModuleAdminController
         $this->context->smarty->assign(array(
             'cssUrl' => $this->assetUrl('views/css/scanner-manager.css'),
             'registryJsUrl' => $this->assetUrl('views/js/scanners/registry.js'),
+            // Must load before any adapter: every adapter reads
+            // window.V5idScannerSupport at the top of its own IIFE.
+            'adapterSupportJsUrl' => $this->assetUrl('views/js/scanners/adapter-support.js'),
             'adapterJsUrls' => $adapterJsUrls,
             'channelJsUrl' => $this->assetUrl('views/js/scanner-channel.js'),
             'managerAppJsUrl' => $this->assetUrl('views/js/scanner-manager-app.js'),

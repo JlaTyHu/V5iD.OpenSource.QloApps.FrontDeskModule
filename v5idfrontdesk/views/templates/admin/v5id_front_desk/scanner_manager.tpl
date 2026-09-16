@@ -18,6 +18,7 @@
 </div>
 
 <script src="{$registryJsUrl|escape:'htmlall':'UTF-8'}"></script>
+<script src="{$adapterSupportJsUrl|escape:'htmlall':'UTF-8'}"></script>
 {foreach from=$adapterJsUrls item=adapterJsUrl}
 	<script src="{$adapterJsUrl|escape:'htmlall':'UTF-8'}"></script>
 {/foreach}

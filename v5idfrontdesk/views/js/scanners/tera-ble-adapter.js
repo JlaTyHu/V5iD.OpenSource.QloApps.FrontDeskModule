@@ -31,6 +31,8 @@
 (function (window, navigator) {
     'use strict';
 
+    var support = window.V5idScannerSupport;
+
     // ── BLE constants (Tera HW0009 — from the reference client) ─────────
     var BLE_NAME = 'BarCode Scanner BLE';
     var SVC = '0000feea-0000-1000-8000-00805f9b34fb'; // vendor-custom, same UUID family as the Marson MT810
@@ -148,25 +150,6 @@
             return null;
         }
 
-        async function connectGatt(maxAttempts) {
-            maxAttempts = maxAttempts || 4;
-            for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-                try {
-                    var srv = await device.gatt.connect();
-                    await new Promise(function (r) { setTimeout(r, 350); });
-                    if (!device.gatt.connected) {
-                        throw new Error('Link dropped immediately after connect');
-                    }
-                    return srv;
-                } catch (e) {
-                    if (attempt === maxAttempts) {
-                        throw e;
-                    }
-                    await new Promise(function (r) { setTimeout(r, 800 * attempt); });
-                }
-            }
-        }
-
         async function setupServices() {
             var svc = await server.getPrimaryService(SVC);
             notifyChr = await svc.getCharacteristic(N_CHR);
@@ -175,15 +158,10 @@
             notifyChr.addEventListener('characteristicvaluechanged', onNotify);
         }
 
-        /** A scan performed during the serial handshake must not be answered as the command response — see processBarcode() for the same acceptance rule. */
-        function looksLikeIdScan(text) {
-            return text.indexOf('ANSI') !== -1 || text.trim().length >= 50;
-        }
-
         function onNotify(event) {
             var text = new TextDecoder('utf-8', { fatal: false }).decode(event.target.value);
 
-            if (pendingSerialResolve && !looksLikeIdScan(text)) {
+            if (pendingSerialResolve && !support.looksLikeIdScan(text)) {
                 var raw = text.replace(/[\r\n\x00]/g, '').trim();
                 if (raw.length > 0) {
                     var resolve = pendingSerialResolve;
@@ -206,12 +184,6 @@
             }
         }
 
-        // Same AAMVA/ANSI marker + '@' backtrack as the other adapters in
-        // this module — a defensive filter this device's own reference
-        // client doesn't need (it gates on a separate "validation screen"
-        // state this module has no equivalent of), but harmless and
-        // consistent here since we start listening for real scans as soon
-        // as we're connected rather than after a second explicit step.
         function processBarcode(bcData) {
             if (!bcData) {
                 return;
@@ -221,23 +193,13 @@
                 return;
             }
 
-            var ansiIdx = barcodeText.indexOf('ANSI');
-            if (ansiIdx < 0 && barcodeText.length < 50) {
+            var payload = support.extractIdPayload(barcodeText);
+            if (payload === null) {
                 return;
-            }
-            if (ansiIdx >= 0) {
-                var startIdx = ansiIdx;
-                for (var j = ansiIdx - 1; j >= Math.max(0, ansiIdx - 20); j--) {
-                    if (barcodeText[j] === '@') {
-                        startIdx = j;
-                        break;
-                    }
-                }
-                barcodeText = barcodeText.substring(startIdx);
             }
 
             if (typeof onScan === 'function') {
-                onScan(barcodeText);
+                onScan(payload);
             }
         }
 
@@ -275,7 +237,7 @@
                 return;
             }
             try {
-                server = await connectGatt(2);
+                server = await support.connectGatt(device, 2);
                 await setupServices();
                 // Re-arm immediate mode, matching the reference client's own
                 // reconnect path (its initScanner() runs again there too).
@@ -341,7 +303,7 @@
                         device.addEventListener('gattserverdisconnected', handleDisconnect);
                     }
 
-                    server = await connectGatt();
+                    server = await support.connectGatt(device);
                     await setupServices();
 
                     // Serial before Immediate Mode, same order as the
