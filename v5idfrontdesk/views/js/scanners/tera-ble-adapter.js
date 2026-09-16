@@ -57,6 +57,9 @@
     var SERIAL_MAX_ATTEMPTS = 5;
     /** Fixed retry cadence once connected — matches the reference client's own indefinite "every 2s until it's back" reconnect loop, rather than escalating backoff. */
     var RECONNECT_INTERVAL_MS = 2000;
+    /** Reconnection gives up after this many consecutive failures, backing off geometrically up to RECONNECT_MAX_DELAY_MS in between. */
+    var RECONNECT_MAX_ATTEMPTS = 8;
+    var RECONNECT_MAX_DELAY_MS = 30000;
 
     function createAdapter() {
         var device = null;
@@ -72,6 +75,7 @@
         var userDisconnected = false;
         var reconnecting = false;
         var reconnectTimer = null;
+        var reconnectAttempts = 0;
 
         var onScan = null;
         var onStatusChange = null;
@@ -239,10 +243,15 @@
 
         function stopReconnect() {
             reconnecting = false;
+            reconnectAttempts = 0;
             if (reconnectTimer) {
                 clearTimeout(reconnectTimer);
                 reconnectTimer = null;
             }
+        }
+
+        function deviceLabel() {
+            return (device && device.name) ? device.name : 'Tera scanner';
         }
 
         function scheduleReconnect(delay) {
@@ -274,7 +283,17 @@
                 stopReconnect();
                 setStatus('connected');
             } catch (e) {
-                scheduleReconnect(RECONNECT_INTERVAL_MS);
+                reconnectAttempts++;
+                if (reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+                    // Without a ceiling this retried every two seconds for as
+                    // long as the tab stayed open, and the board read
+                    // "Reconnecting..." indefinitely with no further error.
+                    stopReconnect();
+                    setStatus('error');
+                    reportError('Lost the connection to ' + deviceLabel() + ' and could not restore it. Reconnect it from Scanner Manager.');
+                    return;
+                }
+                scheduleReconnect(Math.min(RECONNECT_INTERVAL_MS * Math.pow(2, reconnectAttempts - 1), RECONNECT_MAX_DELAY_MS));
             }
         }
 

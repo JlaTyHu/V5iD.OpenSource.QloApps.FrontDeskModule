@@ -43,6 +43,10 @@
     var NOTIFY_DEBOUNCE_MS = 200;
     var SERIAL_TIMEOUT_MS = 3000;
 
+    /** Reconnection gives up after this many consecutive failures, backing off geometrically up to RECONNECT_MAX_DELAY_MS in between. */
+    var RECONNECT_MAX_ATTEMPTS = 8;
+    var RECONNECT_MAX_DELAY_MS = 30000;
+
     /** Strips vendor command-wrapper tokens like "^&C11&^"/"^&OK&^" that may be echoed around the payload, leaving just the serial value. */
     function parseSerialResponse(raw) {
         var stripped = raw.replace(/\^&[^&]*&\^/g, '').trim();
@@ -63,6 +67,7 @@
         var userDisconnected = false;
         var reconnecting = false;
         var reconnectTimer = null;
+        var reconnectAttempts = 0;
 
         var onScan = null;
         var onStatusChange = null;
@@ -237,10 +242,15 @@
 
         function stopReconnect() {
             reconnecting = false;
+            reconnectAttempts = 0;
             if (reconnectTimer) {
                 clearTimeout(reconnectTimer);
                 reconnectTimer = null;
             }
+        }
+
+        function deviceLabel() {
+            return (device && device.name) ? device.name : 'Marson scanner';
         }
 
         function scheduleReconnect(delay) {
@@ -269,7 +279,17 @@
                 stopReconnect();
                 setStatus('connected');
             } catch (e) {
-                scheduleReconnect(3000);
+                reconnectAttempts++;
+                if (reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+                    // Without a ceiling this retried every three seconds for
+                    // as long as the tab stayed open, and the board read
+                    // "Reconnecting..." indefinitely with no further error.
+                    stopReconnect();
+                    setStatus('error');
+                    reportError('Lost the connection to ' + deviceLabel() + ' and could not restore it. Reconnect it from Scanner Manager.');
+                    return;
+                }
+                scheduleReconnect(Math.min(3000 * Math.pow(2, reconnectAttempts - 1), RECONNECT_MAX_DELAY_MS));
             }
         }
 
