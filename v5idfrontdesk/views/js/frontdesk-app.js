@@ -69,6 +69,9 @@
 
     var NO_BOOKINGS = [];
 
+    /** The banner carries the name, surname and age read off a guest document, so it does not sit on an unattended desk indefinitely. */
+    var SCAN_BANNER_TTL_MS = 60000;
+
     function guestName(row) {
         return [row.firstname, row.lastname].filter(Boolean).join(' ') || '—';
     }
@@ -112,6 +115,7 @@
                 actionLoading: false,
 
                 scanBanner: null, // { result, matches }
+                scanBannerTimer: null,
 
                 // Comparison of the ID scan that led to the currently open
                 // booking against the guest's stored profile — null unless
@@ -238,6 +242,9 @@
             }
             if (this.managerPingTimer) {
                 window.clearInterval(this.managerPingTimer);
+            }
+            if (this.scanBannerTimer) {
+                window.clearTimeout(this.scanBannerTimer);
             }
             if (scannerChannel) {
                 scannerChannel.close();
@@ -405,7 +412,7 @@
             onHotelChange: function () {
                 this.selected = null;
                 this.searchResults = [];
-                this.scanBanner = null;
+                this.setScanBanner(null);
                 this.searchSeq++;
                 this.loadBoard();
                 this.loadActivity();
@@ -468,7 +475,7 @@
             openBooking: function (booking, scanResult) {
                 this.selected = booking;
                 this.swap = null;
-                this.scanBanner = null;
+                this.setScanBanner(null);
                 this.profileCheck = null;
                 this.profileCheckScan = null;
                 if (scanResult && scanResult.valid) {
@@ -612,20 +619,33 @@
                 if (!this.idHotel) {
                     return;
                 }
-                this.scanBanner = { loading: true };
+                this.setScanBanner({ loading: true });
                 api('ScanValidate', { id_hotel: this.idHotel, scan: raw, device_serial: serial || '' }).then(function (res) {
                     if (!res.success) {
-                        this.scanBanner = { loading: false, error: res.message || 'Scan failed.' };
+                        this.setScanBanner({ loading: false, error: res.message || 'Scan failed.' });
                         return;
                     }
-                    this.scanBanner = { loading: false, result: res.result, matches: res.matches };
+                    this.setScanBanner({ loading: false, result: res.result, matches: res.matches });
                     if (res.matches && res.matches.length === 1) {
                         this.openBooking(res.matches[0], res.result);
                     }
                     this.loadActivity();
                 }.bind(this)).catch(function (err) {
-                    this.scanBanner = { loading: false, error: (err && err.message) ? err.message : 'Scan failed.' };
+                    this.setScanBanner({ loading: false, error: (err && err.message) ? err.message : 'Scan failed.' });
                 }.bind(this));
+            },
+            setScanBanner: function (banner) {
+                if (this.scanBannerTimer) {
+                    window.clearTimeout(this.scanBannerTimer);
+                    this.scanBannerTimer = null;
+                }
+                this.scanBanner = banner;
+                if (banner && !banner.loading) {
+                    this.scanBannerTimer = window.setTimeout(function () {
+                        this.scanBanner = null;
+                        this.scanBannerTimer = null;
+                    }.bind(this), SCAN_BANNER_TTL_MS);
+                }
             },
             scanOutcome: function (result) {
                 if (result.valid) {
@@ -649,7 +669,7 @@
                 return result.valid ? '' : (result.message || '');
             },
             dismissScanBanner: function () {
-                this.scanBanner = null;
+                this.setScanBanner(null);
             },
         },
         template:
