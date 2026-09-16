@@ -543,6 +543,27 @@
                     this.loadActivity();
                 }.bind(this));
             },
+            scanOutcome: function (result) {
+                if (result.valid) {
+                    return 'verified';
+                }
+
+                return (result.errors && result.errors.length) ? 'rejected' : 'unavailable';
+            },
+            scanOutcomeLabel: function (result) {
+                switch (this.scanOutcome(result)) {
+                    case 'verified': return 'ID verified';
+                    case 'rejected': return 'ID did not validate';
+                    default: return 'ID could not be checked';
+                }
+            },
+            scanOutcomeDetail: function (result) {
+                if (result.errors && result.errors.length) {
+                    return result.errors.join(', ');
+                }
+
+                return result.valid ? '' : (result.message || '');
+            },
             dismissScanBanner: function () {
                 this.scanBanner = null;
             },
@@ -680,11 +701,11 @@
             '    <div v-if="scanBanner.loading">Validating scan…</div>' +
             '    <div v-else-if="scanBanner.error">{{ scanBanner.error }}</div>' +
             '    <div v-else>' +
-            '      <div class="v5idfd-scan-result" :class="scanBanner.result.valid ? \'ok\' : \'bad\'">' +
-            '        <strong>{{ scanBanner.result.valid ? \'ID verified\' : \'ID did not validate\' }}</strong>' +
+            '      <div class="v5idfd-scan-result" :class="\'is-\' + scanOutcome(scanBanner.result)">' +
+            '        <strong>{{ scanOutcomeLabel(scanBanner.result) }}</strong>' +
             '        <span v-if="scanBanner.result.firstName">{{ scanBanner.result.firstName }} {{ scanBanner.result.lastName }}</span>' +
             '        <span v-if="scanBanner.result.age">· {{ scanBanner.result.age }} yrs</span>' +
-            '        <span v-if="!scanBanner.result.valid">{{ scanBanner.result.errors.join(\', \') }}</span>' +
+            '        <span v-if="scanOutcomeDetail(scanBanner.result)">{{ scanOutcomeDetail(scanBanner.result) }}</span>' +
             '      </div>' +
             '      <div class="v5idfd-scan-matches" v-if="scanBanner.matches && scanBanner.matches.length > 1">' +
             '        <p>Multiple bookings match this name — pick one:</p>' +
@@ -692,7 +713,7 @@
             '          Room {{ m.room_num }} — {{ guestName(m) }}' +
             '        </button>' +
             '      </div>' +
-            '      <p v-else-if="scanBanner.matches && !scanBanner.matches.length" class="v5idfd-muted">No matching arrival found — search manually if needed.</p>' +
+            '      <p v-else-if="scanBanner.result.valid && scanBanner.matches && !scanBanner.matches.length" class="v5idfd-muted">No matching arrival found — search manually if needed.</p>' +
             '    </div>' +
             '    <button class="v5idfd-panel-close" @click="dismissScanBanner">&times;</button>' +
             '  </div>' +

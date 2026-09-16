@@ -589,12 +589,16 @@
     font-size: 14px;
 }
 
-.v5idfd-scan-result.ok strong {
+.v5idfd-scan-result.is-verified strong {
     color: var(--v5fd-checkedin);
 }
 
-.v5idfd-scan-result.bad strong {
+.v5idfd-scan-result.is-rejected strong {
     color: #b91c1c;
+}
+
+.v5idfd-scan-result.is-unavailable strong {
+    color: var(--v5fd-alloted);
 }
 
 .v5idfd-scan-matches {
