@@ -194,6 +194,7 @@ class AdminV5idFrontDeskController extends ModuleAdminController
             'channelJsUrl' => $this->assetUrl('views/js/scanner-channel.js'),
             'managerAppJsUrl' => $this->assetUrl('views/js/scanner-manager-app.js'),
             'hotelName' => $hotelName,
+            'pageLang' => $this->context->language->iso_code,
             // Read by scanner-manager-app.js as window.v5idScannerManagerConfig
             // — every device list/save/delete call it makes is scoped to
             // this hotel, both here (what it asks for) and server-side
@@ -229,20 +230,13 @@ class AdminV5idFrontDeskController extends ModuleAdminController
     }
 
     /**
-     * Module asset URL with a filemtime-based cache-busting query string, so
-     * browsers pick up JS/CSS changes immediately after a deploy instead of
-     * serving a stale cached copy.
-     *
      * @param string $relativePath
      *
      * @return string
      */
     private function assetUrl($relativePath)
     {
-        $localFile = $this->module->getLocalPath().$relativePath;
-        $version = is_file($localFile) ? filemtime($localFile) : $this->module->version;
-
-        return $this->module->getPathUri().$relativePath.'?v='.$version;
+        return $this->module->assetUri($relativePath);
     }
 
     /**
