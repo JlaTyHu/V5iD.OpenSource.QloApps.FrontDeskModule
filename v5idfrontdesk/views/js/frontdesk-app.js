@@ -13,6 +13,10 @@
     // variable here is equivalent to an instance property.
     var scannerChannel = null;
 
+    var MANAGER_PING_INTERVAL_MS = 2000;
+    /** Three missed pings — the manager answers over BroadcastChannel, which the browser does not throttle. */
+    var MANAGER_SILENCE_MS = 6500;
+
     function api(action, params) {
         var body = new URLSearchParams(Object.assign({
             ajax: 1,
@@ -112,7 +116,8 @@
                 scannerAdapters: cfg.scannerAdapters || [],
                 scannerStatuses: {}, // deviceId -> disconnected|connecting|connected|reconnecting|error — one entry per physical scanner, see scannerOverallStatus
                 managerAlive: false,
-                managerPollTimer: null,
+                managerLastSeenAt: 0,
+                managerPingTimer: null,
 
                 activity: [],
                 scans: [],
@@ -195,8 +200,8 @@
             if (window.V5idScannerListener) {
                 window.V5idScannerListener.stop();
             }
-            if (this.managerPollTimer) {
-                window.clearInterval(this.managerPollTimer);
+            if (this.managerPingTimer) {
+                window.clearInterval(this.managerPingTimer);
             }
             if (scannerChannel) {
                 scannerChannel.close();
@@ -207,7 +212,7 @@
             /**
              * (Re)binds the scanner channel to the currently selected
              * hotel — called on mount and again on every onHotelChange().
-             * Tears down the previous hotel's channel/heartbeat-poll first:
+             * Tears down the previous hotel's channel/ping-poll first:
              * each hotel gets its own BroadcastChannel (see
              * scanner-channel.js), so switching properties without this
              * would leave the board listening to the old hotel's channel,
@@ -215,9 +220,9 @@
              * two properties' Scanner Manager tabs together.
              */
             setupScannerChannel: function () {
-                if (this.managerPollTimer) {
-                    window.clearInterval(this.managerPollTimer);
-                    this.managerPollTimer = null;
+                if (this.managerPingTimer) {
+                    window.clearInterval(this.managerPingTimer);
+                    this.managerPingTimer = null;
                 }
                 if (scannerChannel) {
                     scannerChannel.close();
@@ -225,6 +230,7 @@
                 }
                 this.scannerStatuses = {};
                 this.managerAlive = false;
+                this.managerLastSeenAt = 0;
 
                 if (!window.V5idScannerChannel || !this.idHotel || !this.scannerAdapters.length) {
                     return;
@@ -236,46 +242,39 @@
                 }
 
                 // Any message at all proves the manager tab is alive *right
-                // now* — set this directly rather than waiting for the next
-                // managerPollTimer tick (up to 2s away, and background tabs
-                // can throttle setInterval well past that in some browsers).
-                // A reconnecting device is actively sending 'status'
-                // messages, so this makes the badge track it immediately.
+                // now*, so every handler refreshes the liveness stamp rather
+                // than only the dedicated 'pong'.
                 scannerChannel.on('scan', function (payload) {
-                    this.managerAlive = true;
+                    this.markManagerSeen();
                     this.handleScan(payload.data, payload.serial);
                 }.bind(this));
                 scannerChannel.on('status', function (payload) {
-                    this.managerAlive = true;
+                    this.markManagerSeen();
                     this.scannerStatuses[payload.deviceId] = payload.status;
                 }.bind(this));
                 scannerChannel.on('error', function (payload) {
-                    this.managerAlive = true;
+                    this.markManagerSeen();
                     var adapter = this.scannerAdapters.find(function (a) { return a.id === payload.adapterId; });
                     this.errorMessage = (adapter ? adapter.label : payload.adapterId) + ': ' + payload.message;
                 }.bind(this));
+                scannerChannel.on('pong', this.markManagerSeen.bind(this));
 
-                this.managerAlive = scannerChannel.isManagerAlive();
-                if (this.managerAlive) {
-                    // Picks up whatever the manager is already doing — e.g.
-                    // it connected before this tab loaded, or before we
-                    // navigated back to this page — instead of showing
-                    // "disconnected" until its next status change happens
-                    // to broadcast one.
-                    scannerChannel.send('query-status');
-                }
-                this.managerPollTimer = window.setInterval(function () {
+                scannerChannel.send('ping');
+                this.managerPingTimer = window.setInterval(function () {
                     if (!scannerChannel) {
                         return;
                     }
-                    var alive = scannerChannel.isManagerAlive();
-                    if (alive && !this.managerAlive) {
-                        // The manager tab just appeared (or its heartbeat
-                        // just caught back up) — ask it for a fresh snapshot.
-                        scannerChannel.send('query-status');
+                    if (this.managerAlive && (Date.now() - this.managerLastSeenAt) > MANAGER_SILENCE_MS) {
+                        this.managerAlive = false;
+                        this.scannerStatuses = {};
                     }
-                    this.managerAlive = alive;
-                }.bind(this), 2000);
+                    scannerChannel.send('ping');
+                }.bind(this), MANAGER_PING_INTERVAL_MS);
+            },
+
+            markManagerSeen: function () {
+                this.managerLastSeenAt = Date.now();
+                this.managerAlive = true;
             },
 
             /**

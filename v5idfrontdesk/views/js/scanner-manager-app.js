@@ -222,7 +222,7 @@
                     instance.disconnect();
                 }
             },
-            // Lets boot()'s 'query-status' handler answer with what this row
+            // Lets boot()'s 'ping' handler answer with what this row
             // actually shows right now, not just what it was at the moment
             // it last changed — a board tab that (re)loads after a status
             // change already happened would otherwise never learn it, since
@@ -389,16 +389,16 @@
             devices.forEach(addDeviceRow);
         });
 
-        // A board tab asks for this right after it (re)mounts, so it can
-        // show the real current state immediately instead of guessing
-        // "disconnected" until the next status change happens to fire.
-        channel.on('query-status', function () {
+        // Board tabs ping on a short interval; answering proves this tab is
+        // open right now, and replaying every row's status means a board tab
+        // that (re)mounted after a status change already happened still sees
+        // the real current state rather than guessing "disconnected".
+        channel.on('ping', function () {
+            channel.send('pong');
             rows.forEach(function (row) {
                 channel.send('status', row.currentStatus());
             });
         });
-
-        channel.startHeartbeat();
 
         window.addEventListener('beforeunload', function () {
             rows.forEach(function (row) {
