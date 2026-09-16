@@ -67,6 +67,8 @@
         return term.charAt(0) === '@' || term.indexOf('ANSI') !== -1 || term.indexOf('<<') !== -1;
     }
 
+    var NO_BOOKINGS = [];
+
     function guestName(row) {
         return [row.firstname, row.lastname].filter(Boolean).join(' ') || '—';
     }
@@ -188,6 +190,25 @@
             },
             dateTo: function () {
                 return addDays(this.dateFrom, this.numDays - 1);
+            },
+            /**
+             * Built once per board load rather than filtered per cell: the
+             * template asks for one room/day at a time, so a method scanning
+             * the whole bookings array ran rooms x days times on every
+             * render, including every keystroke in the search field.
+             */
+            bookingsByRoomDay: function () {
+                var map = {};
+                var days = this.days;
+                this.bookings.forEach(function (b) {
+                    days.forEach(function (d) {
+                        if (b.date_from <= d + ' 23:59:59' && b.date_to > d + ' 00:00:00') {
+                            var key = b.id_room + '|' + d;
+                            (map[key] = map[key] || []).push(b);
+                        }
+                    });
+                });
+                return map;
             },
             roomsByFloor: function () {
                 var groups = {};
@@ -392,9 +413,7 @@
             },
 
             bookingsForRoomDay: function (idRoom, day) {
-                return this.bookings.filter(function (b) {
-                    return b.id_room == idRoom && b.date_from <= day + ' 23:59:59' && b.date_to > day + ' 00:00:00';
-                });
+                return this.bookingsByRoomDay[idRoom + '|' + day] || NO_BOOKINGS;
             },
 
             onSearchInput: function () {
