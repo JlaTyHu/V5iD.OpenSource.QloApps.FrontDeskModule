@@ -91,10 +91,12 @@
 
     /**
      * One row for an already-known, previously-paired device — id_hotel,
-     * adapter_id and serial (see V5idFrontDeskScannerDevice) already
-     * identify this exact physical unit, so connecting it doesn't need the
-     * device chooser to reappear (browser support for reconnect-without-a-
-     * prompt permitting — see the protocol's own isSupported()/connect()).
+     * adapter_id and serial (see V5idFrontDeskScannerDevice) identify this
+     * exact physical unit server-side. The browser chooser still appears on
+     * every Connect, because no adapter calls navigator.bluetooth.getDevices()
+     * and the browser-side pairing is not retained across page loads; what the
+     * stored serial buys is the check below that the unit actually chosen is
+     * the one this row was paired with.
      *
      * @param {object} device Row from GetScannerDevices — {id, adapter_id, serial, label}.
      * @param {Element} root
