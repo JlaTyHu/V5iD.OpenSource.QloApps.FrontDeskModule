@@ -83,6 +83,11 @@
                 bookings: [],
                 loadingBoard: false,
                 errorMessage: '',
+                // Bumped per request so a slow reply for a property or search
+                // term the operator has already moved on from is discarded
+                // rather than rendered — see loadBoard() and runSearch().
+                boardSeq: 0,
+                searchSeq: 0,
 
                 searchTerm: '',
                 searchResults: [],
@@ -322,10 +327,14 @@
                 if (!this.idHotel) {
                     return;
                 }
+                var seq = ++this.boardSeq;
                 this.loadingBoard = true;
                 this.errorMessage = '';
                 api('GetBoard', { id_hotel: this.idHotel, date_from: this.dateFrom, date_to: this.dateTo })
                     .then(function (res) {
+                        if (seq !== this.boardSeq) {
+                            return;
+                        }
                         this.loadingBoard = false;
                         if (!res.success) {
                             this.errorMessage = res.message || 'Could not load the board.';
@@ -334,7 +343,12 @@
                         this.rooms = res.rooms;
                         this.bookings = res.bookings;
                     }.bind(this))
-                    .catch(this.apiFailed('loadingBoard', 'Network error while loading the board.'));
+                    .catch(function (err) {
+                        if (seq !== this.boardSeq) {
+                            return;
+                        }
+                        this.apiFailed('loadingBoard', 'Network error while loading the board.')(err);
+                    }.bind(this));
             },
 
             loadActivity: function () {
@@ -359,6 +373,9 @@
             },
             onHotelChange: function () {
                 this.selected = null;
+                this.searchResults = [];
+                this.scanBanner = null;
+                this.searchSeq++;
                 this.loadBoard();
                 this.loadActivity();
                 this.setupScannerChannel();
@@ -382,13 +399,22 @@
                 if (!this.idHotel) {
                     return;
                 }
+                var seq = ++this.searchSeq;
                 this.searching = true;
                 api('SearchGuests', { id_hotel: this.idHotel, term: this.searchTerm }).then(function (res) {
+                    if (seq !== this.searchSeq) {
+                        return;
+                    }
                     this.searching = false;
                     if (res.success) {
                         this.searchResults = res.results;
                     }
-                }.bind(this)).catch(this.apiFailed('searching', 'Could not search guests.'));
+                }.bind(this)).catch(function (err) {
+                    if (seq !== this.searchSeq) {
+                        return;
+                    }
+                    this.apiFailed('searching', 'Could not search guests.')(err);
+                }.bind(this));
             },
 
             /**
