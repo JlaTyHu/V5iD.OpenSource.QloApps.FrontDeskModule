@@ -39,10 +39,6 @@
     var FFE1_CHR = '0000ffe1-0000-1000-8000-00805f9b34fb';
     var MAC_ADDR = [0x7f, 0x7b];
 
-    /** Reconnection gives up after this many consecutive failures, backing off geometrically up to RECONNECT_MAX_DELAY_MS in between. */
-    var RECONNECT_MAX_ATTEMPTS = 8;
-    var RECONNECT_MAX_DELAY_MS = 30000;
-
     var OPTIONAL_SERVICES = [
         SVC,
         '0000180f-0000-1000-8000-00805f9b34fb', // battery
@@ -77,7 +73,6 @@
         var userDisconnected = false;
         var reconnecting = false;
         var reconnectTimer = null;
-        var reconnectAttempts = 0;
 
         var onScan = null;
         var onStatusChange = null;
@@ -283,15 +278,10 @@
 
         function stopReconnect() {
             reconnecting = false;
-            reconnectAttempts = 0;
             if (reconnectTimer) {
                 clearTimeout(reconnectTimer);
                 reconnectTimer = null;
             }
-        }
-
-        function deviceLabel() {
-            return (device && device.name) ? device.name : 'Inateck scanner';
         }
 
         function scheduleReconnect(delay) {
@@ -320,17 +310,10 @@
                 stopReconnect();
                 setStatus('connected');
             } catch (e) {
-                reconnectAttempts++;
-                if (reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
-                    // Without a ceiling this retried every three seconds for
-                    // as long as the tab stayed open, and the board read
-                    // "Reconnecting..." indefinitely with no further error.
-                    stopReconnect();
-                    setStatus('error');
-                    reportError('Lost the connection to ' + deviceLabel() + ' and could not restore it. Reconnect it from Scanner Manager.');
-                    return;
-                }
-                scheduleReconnect(Math.min(3000 * Math.pow(2, reconnectAttempts - 1), RECONNECT_MAX_DELAY_MS));
+                // Deliberately unbounded: these units sleep when idle and
+                // must come back on their own when they wake, so a ceiling
+                // would strand a scanner that was simply left alone.
+                scheduleReconnect(3000);
             }
         }
 
