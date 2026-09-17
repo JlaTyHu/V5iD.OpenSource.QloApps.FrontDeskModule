@@ -155,19 +155,7 @@
         }
 
         function onNotify(event) {
-            var text = new TextDecoder('utf-8', { fatal: false }).decode(event.target.value);
-
-            if (pendingSerialResolve && !support.looksLikeIdScan(text)) {
-                var raw = text.replace(/[\r\n\x00]/g, '').trim();
-                if (raw.length > 0) {
-                    var resolve = pendingSerialResolve;
-                    pendingSerialResolve = null;
-                    resolve(raw);
-                }
-                return;
-            }
-
-            rxBuffer += text;
+            rxBuffer += new TextDecoder('utf-8', { fatal: false }).decode(event.target.value);
             clearTimeout(flushTimer);
             flushTimer = setTimeout(flushBuffer, NOTIFY_DEBOUNCE_MS);
         }
@@ -175,9 +163,27 @@
         function flushBuffer() {
             var payload = rxBuffer.trim();
             rxBuffer = '';
-            if (payload.length > 0) {
-                processBarcode(payload);
+            if (payload.length === 0) {
+                return;
             }
+
+            // Scan or command response is decided on the whole payload, not
+            // on one notification: this unit delivers a scan as several
+            // chunks (hence the debounce above), and judging each chunk
+            // alone made every chunk after the one carrying the ANSI marker
+            // look like a command response — and made a passport MRZ, which
+            // carries no marker at all, look like one from its first chunk.
+            if (pendingSerialResolve && !support.looksLikeIdScan(payload)) {
+                var raw = payload.replace(/[\r\n\x00]/g, '').trim();
+                if (raw.length > 0) {
+                    var resolve = pendingSerialResolve;
+                    pendingSerialResolve = null;
+                    resolve(raw);
+                    return;
+                }
+            }
+
+            processBarcode(payload);
         }
 
         function processBarcode(bcData) {
