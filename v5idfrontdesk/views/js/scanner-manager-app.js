@@ -168,19 +168,37 @@
                 return;
             }
 
+            // An adapter subscribes to notifications before it has read the
+            // unit's serial, so a scan can arrive while the identity check
+            // below is still pending — on Tera that window is the whole
+            // serial handshake. Forwarding it straight away would file it
+            // under this row's registered serial before we know the operator
+            // picked this unit at all, so scans are held until the check
+            // passes and dropped if it does not.
+            var identityConfirmed = false;
+            var heldScans = [];
+
+            function forwardScan(raw) {
+                // serial travels with the scan (not just deviceId/adapterId)
+                // because the Front Desk board forwards it straight through
+                // to V5id's own scan-validation API, which requires a
+                // registered device serial on every request.
+                channel.send('scan', { deviceId: device.id, adapterId: device.adapter_id, serial: device.serial, data: raw });
+                // Confirms a scan came through without echoing any of its
+                // decoded content (name, DOB, document number, ...) to
+                // the screen — this tab is for pairing/monitoring
+                // devices, not for reading what's on anyone's ID.
+                logLine('Scan received (' + raw.length + ' chars) at ' + new Date().toLocaleTimeString());
+            }
+
             instance = protocol.createInstance();
             instance.connect({
                 onScan: function (raw) {
-                    // serial travels with the scan (not just deviceId/adapterId)
-                    // because the Front Desk board forwards it straight through
-                    // to V5id's own scan-validation API, which requires a
-                    // registered device serial on every request.
-                    channel.send('scan', { deviceId: device.id, adapterId: device.adapter_id, serial: device.serial, data: raw });
-                    // Confirms a scan came through without echoing any of its
-                    // decoded content (name, DOB, document number, ...) to
-                    // the screen — this tab is for pairing/monitoring
-                    // devices, not for reading what's on anyone's ID.
-                    logLine('Scan received (' + raw.length + ' chars) at ' + new Date().toLocaleTimeString());
+                    if (!identityConfirmed) {
+                        heldScans.push(raw);
+                        return;
+                    }
+                    forwardScan(raw);
                 },
                 onStatusChange: setStatus,
                 onError: reportError,
@@ -193,14 +211,21 @@
                 // null, which is not a mismatch and stays allowed.
                 var reported = result && result.serial;
                 if (reported && reported !== device.serial) {
+                    heldScans = [];
                     instance.disconnect();
                     instance = null;
                     reportError('This is a different unit: it reports serial ' + reported + ', but this row is paired with ' + device.serial + '.');
                     setStatus('error');
+                    return;
                 }
+
+                identityConfirmed = true;
+                heldScans.forEach(forwardScan);
+                heldScans = [];
             }).catch(function () {
                 // Status/error already reported through the callbacks above
                 // (e.g. the user cancelled the device chooser).
+                heldScans = [];
             });
         });
 
