@@ -426,6 +426,13 @@
 
             onSearchInput: function () {
                 clearTimeout(this.searchTimer);
+                // Every edit abandons a request already in flight, clearing
+                // the field included — otherwise its reply arrives during the
+                // debounce and repopulates a dropdown the operator has moved
+                // on from, or emptied. Nothing will clear `searching` for an
+                // abandoned request, so do it here.
+                this.searchSeq++;
+                this.searching = false;
                 if (!this.searchTerm.trim()) {
                     this.searchResults = [];
                     return;
@@ -620,8 +627,16 @@
                 if (!this.idHotel) {
                     return;
                 }
+                // The matches come back scoped to the property that asked for
+                // them, so a reply arriving after the operator switched would
+                // reopen the cleared banner and could open a booking that
+                // belongs to the previous property.
+                var idHotel = this.idHotel;
                 this.setScanBanner({ loading: true });
-                api('ScanValidate', { id_hotel: this.idHotel, scan: raw, device_serial: serial || '' }).then(function (res) {
+                api('ScanValidate', { id_hotel: idHotel, scan: raw, device_serial: serial || '' }).then(function (res) {
+                    if (idHotel !== this.idHotel) {
+                        return;
+                    }
                     if (!res.success) {
                         this.setScanBanner({ loading: false, error: res.message || 'Scan failed.' });
                         return;
@@ -632,6 +647,9 @@
                     }
                     this.loadActivity();
                 }.bind(this)).catch(function (err) {
+                    if (idHotel !== this.idHotel) {
+                        return;
+                    }
                     this.setScanBanner({ loading: false, error: (err && err.message) ? err.message : 'Scan failed.' });
                 }.bind(this));
             },
