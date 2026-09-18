@@ -207,14 +207,18 @@
                 // row, so connecting this row to a different physical unit
                 // would file that unit's scans under this one's registered
                 // serial, in the module scan log and in the V5iD portal
-                // alike. An adapter that cannot read a serial at all reports
-                // null, which is not a mismatch and stays allowed.
+                // alike. A unit that reports no serial at all is not
+                // confirmed either: pairing refuses a device without one, so
+                // every row here has a serial that a genuine match can be
+                // held against.
                 var reported = result && result.serial;
-                if (reported && reported !== device.serial) {
+                if (reported !== device.serial) {
                     heldScans = [];
                     instance.disconnect();
                     instance = null;
-                    reportError('This is a different unit: it reports serial ' + reported + ', but this row is paired with ' + device.serial + '.');
+                    reportError(reported
+                        ? 'This is a different unit: it reports serial ' + reported + ', but this row is paired with ' + device.serial + '.'
+                        : 'This unit didn’t report a serial number, so it can’t be confirmed as ' + device.serial + '. Try connecting it again.');
                     setStatus('error');
                     return;
                 }
